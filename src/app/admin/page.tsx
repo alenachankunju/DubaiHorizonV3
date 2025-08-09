@@ -1,15 +1,63 @@
 
 'use client';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { LayoutDashboard, ListOrdered, Users, MapPin } from "lucide-react";
+import { LayoutDashboard, ListOrdered, Users, MapPin, AlertTriangle } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+
+interface Stats {
+  bookings: number;
+  users: number;
+  destinations: number;
+}
 
 export default function AdminDashboardPage() {
-  // In a real app, you might fetch some summary data here
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const [
+          { count: bookingsCount, error: bookingsError },
+          { data: usersData, error: usersError },
+          { count: destinationsCount, error: destinationsError },
+        ] = await Promise.all([
+          supabase.from('bookings').select('*', { count: 'exact', head: true }),
+          supabase.auth.admin.listUsers(),
+          supabase.from('featured_destinations').select('*', { count: 'exact', head: true }),
+        ]);
+
+        if (bookingsError) throw bookingsError;
+        if (usersError) throw usersError;
+        if (destinationsError) throw destinationsError;
+
+        setStats({
+          bookings: bookingsCount || 0,
+          users: usersData.users.length,
+          destinations: destinationsCount || 0,
+        });
+      } catch (err: any) {
+        console.error("Error fetching admin stats:", err);
+        setError(err.message || "Could not load dashboard statistics.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
   const summaryStats = [
-    { title: "Total Bookings", value: "125", icon: ListOrdered, link: "/admin/bookings" },
-    { title: "Registered Users", value: "42", icon: Users, link: "#" }, // Link can be to a user management page later
-    { title: "Featured Destinations", value: "5", icon: MapPin, link: "#" }, // Link to destinations management
+    { title: "Total Bookings", value: stats?.bookings, icon: ListOrdered, link: "/admin/bookings" },
+    { title: "Registered Users", value: stats?.users, icon: Users, link: "#" },
+    { title: "Featured Destinations", value: stats?.destinations, icon: MapPin, link: "/admin/destinations" },
   ];
 
   return (
@@ -19,25 +67,41 @@ export default function AdminDashboardPage() {
         This is your control center. Manage bookings, users, and site content from here.
       </p>
 
+      {error && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Error Loading Statistics</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {summaryStats.map((stat) => (
-          <Card key={stat.title} className="hover:shadow-lg transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-              <stat.icon className="h-5 w-5 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
-              {stat.link !== "#" ? (
-                 <Link href={stat.link} className="text-xs text-muted-foreground hover:text-primary pt-1">
-                    View Details
-                 </Link>
-              ): (
-                <p className="text-xs text-muted-foreground pt-1">Details coming soon</p>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+        {isLoading ? (
+          <>
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+          </>
+        ) : (
+          summaryStats.map((stat) => (
+            <Card key={stat.title} className="hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
+                <stat.icon className="h-5 w-5 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stat.value ?? 'N/A'}</div>
+                {stat.link !== "#" ? (
+                   <Link href={stat.link} className="text-xs text-muted-foreground hover:text-primary pt-1">
+                      View Details
+                   </Link>
+                ): (
+                  <p className="text-xs text-muted-foreground pt-1">Details coming soon</p>
+                )}
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
       
       <Card>
@@ -57,4 +121,19 @@ export default function AdminDashboardPage() {
 
     </div>
   );
+}
+
+function CardSkeleton() {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <Skeleton className="h-4 w-2/3" />
+        <Skeleton className="h-5 w-5 rounded-sm" />
+      </CardHeader>
+      <CardContent>
+        <Skeleton className="h-7 w-1/4 mb-2" />
+        <Skeleton className="h-3 w-1/2" />
+      </CardContent>
+    </Card>
+  )
 }
