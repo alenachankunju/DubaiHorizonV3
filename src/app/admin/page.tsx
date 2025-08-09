@@ -10,7 +10,7 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
 interface Stats {
   bookings: number;
-  users: number | null; // Allow null for users count
+  users: number | null;
   destinations: number;
 }
 
@@ -24,28 +24,33 @@ export default function AdminDashboardPage() {
       setIsLoading(true);
       setError(null);
       try {
-        // NOTE: supabase.auth.admin.listUsers() CANNOT be called from the client.
-        // It requires the service_role key which should never be exposed in the browser.
-        // We will fetch the other stats and handle the user count separately if needed via a secure backend function later.
+        // Fetch bookings, users (via RPC), and destinations count in parallel
         const [
           { count: bookingsCount, error: bookingsError },
+          { data: usersData, error: usersError },
           { count: destinationsCount, error: destinationsError },
         ] = await Promise.all([
           supabase.from('bookings').select('*', { count: 'exact', head: true }),
+          supabase.rpc('get_total_users'), // Call the new database function
           supabase.from('featured_destinations').select('*', { count: 'exact', head: true }),
         ]);
 
         if (bookingsError) throw bookingsError;
+        if (usersError) throw usersError;
         if (destinationsError) throw destinationsError;
 
         setStats({
           bookings: bookingsCount || 0,
-          users: null, // Set users to null as it cannot be fetched from client
+          users: usersData,
           destinations: destinationsCount || 0,
         });
       } catch (err: any) {
         console.error("Error fetching admin stats:", err);
-        setError(err.message || "Could not load dashboard statistics.");
+        let errorMessage = err.message || "Could not load dashboard statistics.";
+        if (err.message?.includes("function get_total_users() does not exist")) {
+            errorMessage = "The 'get_total_users' function was not found. Please ensure you have created it in your Supabase SQL Editor as per the instructions."
+        }
+        setError(errorMessage);
       } finally {
         setIsLoading(false);
       }
