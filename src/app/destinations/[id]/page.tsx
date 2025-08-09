@@ -188,6 +188,23 @@ export default function DestinationDetailPage() {
   };
   
   const handleBookNow = () => {
+    // Check if the product is 'Burj Khalifa' and redirect to Stripe
+    if (destination.name === 'Burj Khalifa') {
+      const stripeLink = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK;
+      if (stripeLink && stripeLink !== 'YOUR_STRIPE_PAYMENT_LINK_HERE') {
+        router.push(stripeLink);
+        return;
+      } else {
+        toast({
+          title: "Booking Not Available",
+          description: "The payment link for this product is not configured yet.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
+    // Default flow for all other products
     if (!user) {
       toast({
         title: "Login Required",
