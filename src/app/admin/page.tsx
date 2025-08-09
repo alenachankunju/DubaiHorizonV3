@@ -10,7 +10,7 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
 interface Stats {
   bookings: number;
-  users: number;
+  users: number | null; // Allow null for users count
   destinations: number;
 }
 
@@ -24,23 +24,23 @@ export default function AdminDashboardPage() {
       setIsLoading(true);
       setError(null);
       try {
+        // NOTE: supabase.auth.admin.listUsers() CANNOT be called from the client.
+        // It requires the service_role key which should never be exposed in the browser.
+        // We will fetch the other stats and handle the user count separately if needed via a secure backend function later.
         const [
           { count: bookingsCount, error: bookingsError },
-          { data: usersData, error: usersError },
           { count: destinationsCount, error: destinationsError },
         ] = await Promise.all([
           supabase.from('bookings').select('*', { count: 'exact', head: true }),
-          supabase.auth.admin.listUsers(),
           supabase.from('featured_destinations').select('*', { count: 'exact', head: true }),
         ]);
 
         if (bookingsError) throw bookingsError;
-        if (usersError) throw usersError;
         if (destinationsError) throw destinationsError;
 
         setStats({
           bookings: bookingsCount || 0,
-          users: usersData.users.length,
+          users: null, // Set users to null as it cannot be fetched from client
           destinations: destinationsCount || 0,
         });
       } catch (err: any) {
@@ -96,7 +96,7 @@ export default function AdminDashboardPage() {
                       View Details
                    </Link>
                 ): (
-                  <p className="text-xs text-muted-foreground pt-1">Details coming soon</p>
+                  <p className="text-xs text-muted-foreground pt-1">{stat.value === null ? "Cannot be shown on client" : "Details coming soon"}</p>
                 )}
               </CardContent>
             </Card>
